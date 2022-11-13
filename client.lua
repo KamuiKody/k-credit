@@ -243,7 +243,7 @@ RegisterNetEvent('k-credit:pay',function(data)
     TriggerServerEvent('k-credit:player:pay', data)
 end)
 
-CreateThread(function()
+RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
     while true do
         QBCore.Functions.TriggerCallback('k-credit:getdebts', function(cb)
             for k,v in pairs(cb) do
