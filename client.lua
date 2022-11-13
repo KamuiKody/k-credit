@@ -3,6 +3,7 @@ local approvalmenu = {}
 local loanoptions = {}
 local loancheck = {}
 local debtoptions = {}
+local loggedIn = false
 
 CreateThread(function()
     for k,v in pairs(Config.CreditStation) do
@@ -244,17 +245,23 @@ RegisterNetEvent('k-credit:pay',function(data)
 end)
 
 RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
-    while true do
+    local source = QBCore.Functions.GetPlayerData().source
+    loggedIn = true
+    while loggedIn do
         QBCore.Functions.TriggerCallback('k-credit:getdebts', function(cb)
             for k,v in pairs(cb) do
                 if tonumber(v.timer) < 1800000 and tonumber(v.paid) == tonumber(0) then
                     QBCore.Functions.Notify('You need to go pay at least $'..(v.balance * Config.Payment['minimum'])..' on your '..v.type, 'error', 5000)
                 end
             end
-        end, QBCore.Functions.GetPlayerData().source)
-        local sleep = Config.Payment['refresh'] * 60000
+        end, source)
+        local sleep = Config.Payment['refresh'] * (60 * 1000)
         Wait(sleep)
     end
+end)
+
+RegisterNetEvent('QBCore:Client:OnPlayerUnload', function()
+    loggedIn = false
 end)
 
 RegisterNetEvent('k-credit:bankercheck', function(data)
