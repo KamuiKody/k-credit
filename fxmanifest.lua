@@ -16,7 +16,5 @@ server_scripts {
     'server.lua'
 }
 escrow_ignore {
-    'server.lua',
-    'client.lua',
     "config.lua"
 }

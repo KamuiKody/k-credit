@@ -3,7 +3,6 @@ local approvalmenu = {}
 local loanoptions = {}
 local loancheck = {}
 local debtoptions = {}
-local loggedIn = false
 
 CreateThread(function()
     for k,v in pairs(Config.CreditStation) do
@@ -245,23 +244,17 @@ RegisterNetEvent('k-credit:pay',function(data)
 end)
 
 RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
-    local source = QBCore.Functions.GetPlayerData().source
-    loggedIn = true
-    while loggedIn do
+    while true do        
         QBCore.Functions.TriggerCallback('k-credit:getdebts', function(cb)
             for k,v in pairs(cb) do
                 if tonumber(v.timer) < 1800000 and tonumber(v.paid) == tonumber(0) then
                     QBCore.Functions.Notify('You need to go pay at least $'..(v.balance * Config.Payment['minimum'])..' on your '..v.type, 'error', 5000)
                 end
             end
-        end, source)
-        local sleep = Config.Payment['refresh'] * (60 * 1000)
+        end, bankcheck, QBCore.Functions.GetPlayerData().source)
+        local sleep = Config.Payment['refresh'] * 60000
         Wait(sleep)
     end
-end)
-
-RegisterNetEvent('QBCore:Client:OnPlayerUnload', function()
-    loggedIn = false
 end)
 
 RegisterNetEvent('k-credit:bankercheck', function(data)
@@ -373,8 +366,11 @@ end)
 
 RegisterNetEvent('k-credit:depositcheck', function(data)
     local ply = data.ply
+    --print(ply)
     QBCore.Functions.TriggerCallback('k-credit:returnitems', function(cb)
+       --print(#cb)
         for i = 1,#cb,1 do
+            --print(cb[i].info.job,cb[i].info.worth,cb[i].info.loannumber)
             debtoptions[#debtoptions+1] = {
             header = cb[i].info.job,
             txt = cb[i].info.worth,
@@ -400,7 +396,7 @@ RegisterNetEvent('k-credit:deposit', function(data)
 end)
 
 RegisterNetEvent('k-credit:bankcheck', function()
-    TriggerServerEvent('k-credit:checkbankforneg')
+    TriggerServerEvent('k-credit:checkbankforneg', QBCore.Functions.GetPlayerData().source)
 end)
 
 RegisterNetEvent('k-credit:creditstation', function(data)

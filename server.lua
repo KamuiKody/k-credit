@@ -4,6 +4,7 @@ local lvl = 1
 local data = {}
 local commission = 0
 local currentResourceName = GetCurrentResourceName()
+local playerloaded = false
 
 local function AddScore(citizenid,amount)
     local info = MySQL.query.await('SELECT * FROM players WHERE citizenid = ?', {citizenid})
@@ -11,13 +12,18 @@ local function AddScore(citizenid,amount)
     local lvl = table.unpack(info).credit_level
     local newScore = curScore + amount
     MySQL.query('UPDATE players SET credit_score = ? WHERE citizenid = ?', {newScore, citizenid})   
-    if lvl ~= 1 then
-        if newScore < Config.CreditLevels[lvl - 1]['credit'] then
-            MySQL.query('UPDATE players SET credit_level = ? WHERE citizenid = ?', {lvl - 1, citizenid})   
+    if tonumber(lvl) ~= 1 then
+        if Config.CreditLevels[tonumber(lvl) - 1] ~= nil then
+            if newScore < Config.CreditLevels[lvl - 1]['credit'] then
+                MySQL.query('UPDATE players SET credit_level = ? WHERE citizenid = ?', {lvl - 1, citizenid}) 
+            end  
         end
     end
-    if newScore > Config.CreditLevels[lvl + 1]['credit'] then
-        MySQL.query('UPDATE players SET credit_level = ? WHERE citizenid = ?', {lvl + 1, citizenid})   
+    --print(tonumber(lvl) + 1)
+    if Config.CreditLevels[tonumber(lvl) + 1] ~= nil then
+        if newScore > Config.CreditLevels[tonumber(lvl) + 1]['credit'] then
+            MySQL.query('UPDATE players SET credit_level = ? WHERE citizenid = ?', {tonumber(lvl) + 1, citizenid})   
+        end
     end
 end
 exports('AddScore', AddScore)
@@ -29,12 +35,16 @@ local function ReduceScore(citizenid,amount)
     local newScore = curScore - amount
     MySQL.query('UPDATE players SET credit_score = ? WHERE citizenid = ?', {newScore, citizenid})   
     if lvl ~= 1 then
-        if newScore < Config.CreditLevels[lvl - 1]['credit'] then
-            MySQL.query('UPDATE players SET credit_level = ? WHERE citizenid = ?', {lvl - 1, citizenid})   
+        if Config.CreditLevels[tonumber(lvl) - 1] ~= nil then
+            if newScore < Config.CreditLevels[tonumber(lvl) - 1]['credit'] then
+                MySQL.query('UPDATE players SET credit_level = ? WHERE citizenid = ?', {tonumber(lvl) - 1, citizenid})
+            end   
         end
     end
-    if newScore > Config.CreditLevels[lvl + 1]['credit'] then
-        MySQL.query('UPDATE players SET credit_level = ? WHERE citizenid = ?', {lvl + 1, citizenid})   
+    if Config.CreditLevels[tonumber(lvl) + 1] ~= nil then
+        if newScore > Config.CreditLevels[tonumber(lvl) + 1]['credit'] then
+            MySQL.query('UPDATE players SET credit_level = ? WHERE citizenid = ?', {tonumber(lvl) + 1, citizenid})  
+        end 
     end
 end
 exports('ReduceScore', ReduceScore)
@@ -44,10 +54,10 @@ local function MakePayment(type,amount,account)
     local citizenid = QBCore.Functions.GetPlayer(src).PlayerData.citizenid
     local info = MySQL.query.await('SELECT * FROM players WHERE citizenid = ?', {citizenid})
     local line = MySQL.query.await('SELECT * FROM credit WHERE account = ?', {account})
-    local curScore = table.unpack(info).credit_score
-    local lvl = table.unpack(info).credit_level
-    local balance = table.unpack(line).balance
-    local paid = table.unpack(line).paid
+    local curScore = tonumber(table.unpack(info).credit_score)
+    local lvl = tonumber(table.unpack(info).credit_level)
+    local balance = tonumber(table.unpack(line).balance)
+    local paid = tonumber(table.unpack(line).paid)
     local newbalance = balance - amount
     if newbalance < 0 then
         newbalance = 0
@@ -115,7 +125,7 @@ local function InsertCredit(type,player,account,balance,interest,limit)
         limit = limit 
         balance = 0
     else
-        balance = balance
+        balance = balance + (balance * (interest/100))
         limit = balance
     end
     MySQL.insert('INSERT INTO credit (`citizenid`, `type`, `account`, `balance`, `interest`, `limit`, `paid`, `timer`) VALUES (:citizenid, :type, :account, :balance, :interest, :limit, :paid, :timer) ON DUPLICATE KEY UPDATE balance = :balance', {
@@ -190,25 +200,29 @@ exports('Deposit', Deposit)
 
 local function StartTimeCycle()
     while true do
-        local sleep = Config.Payment['refresh'] * 60000
+        local sleep = 5000--Config.Payment['refresh'] * 60000
         Wait(sleep)
         local info = MySQL.query.await('SELECT * FROM credit WHERE 1', {})
-        TriggerClientEvent('k-credit:bankcheck', -1)
+        if playerloaded then
+            TriggerClientEvent('k-credit:bankcheck', -1)
+        end
         for i = 1,#info,1 do 
-            local account = table.unpack(info[i]).account
-            local cid = table.unpack(info[i]).citizenid
-            local newtime = table.unpack(info[i]).timer - sleep
-            if newtime < 0 then
-                newtime = 0
-            end
-            MySQL.query('UPDATE credit SET timer = ? WHERE account = ?', {newtime, account})
-            Wait(0)
-            if newtime == 0 then 
-                MySQL.query('UPDATE credit SET timer = ? WHERE account = ?', {Config.Payment['time'] * 86400000, account}) 
-                local paid = table.unpack(info[i]).paid 
-                local type = table.unpack(info[i]).type
-                local balance = table.unpack(info[i]).balance
-                local interest = balance + (math.floor(balance * table.unpack(info[i]).interest) * 1)
+            ----print(info[i].account)
+                local account = info[i].account
+                local cid = info[i].citizenid
+                local newtime = tonumber(info[i].timer) - (sleep * 100) 
+                --print(newtime,account)
+                if newtime < 0 then
+                    newtime = 0
+                end
+                MySQL.query('UPDATE credit SET timer = ? WHERE account = ?', {newtime, account})
+                Wait(0)
+                if newtime == 0 then 
+                    MySQL.query('UPDATE credit SET timer = ? WHERE account = ?', {Config.Payment['time'] * 86400000, account}) 
+                    local paid = info[i].paid 
+                    local type = info[i].type
+                    local balance = tonumber(info[i].balance)
+                local interest = balance + (math.floor(balance * info[i].interest) * 1)
                 if paid == 1 then
                     if type == 'card' then
                         AddScore(cid,Config.Payment['rewards'].credit)
@@ -224,7 +238,7 @@ local function StartTimeCycle()
                     MySQL.query('UPDATE credit SET balance = ? WHERE account = ?', {newbalance, account})
                 end
                 if type == 'card' then
-                    local limit = table.unpack(info[i]).limit
+                    local limit = info[i].limit
                     local used = balance/limit
                     if used >= Config.Payment['cardbalances'].low and used <= Config.Payment['cardbalances'].high then
                         AddScore(cid,Config.Payment['rewards']['card'])
@@ -244,15 +258,20 @@ AddEventHandler('onResourceStart', function(currentResourceName)
     end
 end)
 
-RegisterServerEvent('k-credit:checkbankforneg', function()
-    if ~= source then return end
-    local src = source
+RegisterServerEvent('k-credit:checkbankforneg', function(ply)
+    local src = ply or source
+    if src ~= nil then
     local Player = QBCore.Functions.GetPlayer(src)
-    local citizenid = QBCore.Functions.GetPlayer(src).PlayerData.citizenid
-    if Player.PlayerData.money.bank >= 0 then
-        AddScore(citizenid, Config.Payment['rewards'].bank)
-    else
-        ReduceScore(citizenid, Config.Payment['reduce'].bank)
+        if QBCore.Functions.GetPlayer(src).PlayerData.citizenid ~= nil then
+            local citizenid = QBCore.Functions.GetPlayer(src).PlayerData.citizenid
+            if Player.PlayerData.money.bank >= 0 then
+                AddScore(citizenid, Config.Payment['rewards'].bank)
+            else
+                ReduceScore(citizenid, Config.Payment['reduce'].bank)
+            end
+        else
+            return
+        end
     end
 end)
 
@@ -475,7 +494,7 @@ RegisterServerEvent("k-credit:player:pay", function(data)
     elseif data.type == 'credit' then
         local item = billed.Functions.GetItemByName(Config.CardItem)
         if ChargeCard(item.info.cardnumber,data.amount) then
-            print(Config.Registers[data.job].commission,data.job,data.amount)
+            --print(Config.Registers[data.job].commission,data.job,data.amount)
             local commission = Config.Registers[data.job].commission
             Deposit(data.biller,data.job,commission,data.amount)
             TriggerClientEvent('QBCore:Notify', src, 'Invoice Successfully Paid', 'success')
@@ -544,10 +563,15 @@ QBCore.Functions.CreateCallback('k-credit:runcreditcheck', function(source, cb, 
     cb(RunCredit(ply))
 end)
 
-QBCore.Functions.CreateCallback('k-credit:getdebts', function(source, cb, ply)
-    local citizenid = QBCore.Functions.GetPlayer(ply).PlayerData.citizenid
-    local line = MySQL.query.await('SELECT * FROM credit WHERE citizenid = ?', {citizenid})
-    cb(line)
+QBCore.Functions.CreateCallback('k-credit:getdebts', function(source, cb, ply, src)
+    if not ply then
+        ply = src
+    end
+    if ply ~= nil then
+        local citizenid = QBCore.Functions.GetPlayer(ply).PlayerData.citizenid
+        local line = MySQL.query.await('SELECT * FROM credit WHERE citizenid = ?', {citizenid})
+        cb(line)
+    end
 end)
 
 QBCore.Functions.CreateUseableItem(Config.CardItem, function(source, item)
