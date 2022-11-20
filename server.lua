@@ -245,6 +245,7 @@ AddEventHandler('onResourceStart', function(currentResourceName)
 end)
 
 RegisterServerEvent('k-credit:checkbankforneg', function()
+    if ~= source then return end
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     local citizenid = QBCore.Functions.GetPlayer(src).PlayerData.citizenid
